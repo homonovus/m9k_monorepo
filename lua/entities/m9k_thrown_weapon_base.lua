@@ -29,11 +29,9 @@ if SERVER then
         local phys = self:GetPhysicsObject()
 
         if phys:IsValid() then
+            phys:SetMass( 2 )
             phys:Wake()
-            phys:SetMass( 10 )
         end
-
-        self:GetPhysicsObject():SetMass( 2 )
 
         self:SetUseType( SIMPLE_USE )
     end
@@ -53,10 +51,11 @@ if SERVER then
     end
 
     function ENT:Disable()
-        self.PhysicsCollide = function() end
+        self.PhysicsCollide = nil
         self.Lifetime = CurTime() + 10
     end
 
+    local SURFPROP_DEFAULT_SILENT = 76
     function ENT:PhysicsCollide( data )
         if not self.InFlight then return end
         self.InFlight = false
@@ -69,7 +68,7 @@ if SERVER then
         local ent = data.HitEntity
         if not ( ent:IsValid() or ent:IsWorld() ) then return end
 
-        if data.TheirSurfaceProps == 76 then
+        if data.TheirSurfaceProps == SURFPROP_DEFAULT_SILENT then
             SafeRemoveEntityDelayed( self, 0 )
             return
         end
@@ -89,13 +88,11 @@ if SERVER then
 
             self:Disable()
         elseif ent.Health then
-            if not ent:IsPlayer() or ent:IsNPC() or ent:GetClass() == "prop_ragdoll" then
+            if not (ent:IsPlayer() or ent:IsNPC() or ent:GetClass() == "prop_ragdoll") then
                 util.Decal( "ManhackCut", data.HitPos + data.HitNormal, data.HitPos - data.HitNormal )
                 self:EmitSound( hitSounds[math.random( 1, #hitSounds )] )
                 self:Disable()
-            end
-
-            if ent:IsPlayer() or ent:IsNPC() or ent:GetClass() == "prop_ragdoll" then
+            else
                 local effectdata = EffectData()
                 effectdata:SetStart( data.HitPos )
                 effectdata:SetOrigin( data.HitPos )
@@ -110,8 +107,8 @@ if SERVER then
             end
         end
 
-        timer.Simple( 0.1, function()
-            if not IsValid( self ) then return end
+        timer.Simple( 0, function()
+            if not self:IsValid() then return end
             self:SetOwner( NULL )
         end )
     end
@@ -119,7 +116,13 @@ if SERVER then
     function ENT:Use( activator )
         if activator:IsPlayer() then
             if activator:GetWeapon( self.GiveClassType ) == NULL then
-                activator:Give( self.GiveClassType )
+                local wep = activator:Give( self.GiveClassType, true )
+
+                local clipSize = wep.Primary.ClipSize or 0
+                if clipSize > 0 then
+                    --local giveAmmo = wep.Primary.DefaultClip - clipSize
+                    wep:SetClip1( clipSize )
+                end
                 self:Remove()
             elseif self.GiveAmmoType then
                 activator:GiveAmmo( 1, self.GiveAmmoType )
